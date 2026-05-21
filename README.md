@@ -3,7 +3,7 @@
 This is a tool to generate client library for [SonarQube](https://www.sonarqube.org/) web-api 
 It allows to generate client library based on your server version.
 
-Tested with SQ L
+Tested with SQ last
 
 # __IMPORTANT__
 __This is an alpha version.__

@@ -1,0 +1,44 @@
+name: lint and Test
+
+on: [push, pull_request]
+
+env:
+  GO_VERSION: '1.26'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  lint_and_test:
+    name: Lint and Test - ${{ matrix.go-version }}
+    strategy:
+      matrix:
+        go-version: [1.26.x]
+        platform: [ubuntu-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: false
+
+      - name: "Checkout ${{ github.ref }}"
+        uses: actions/checkout@v6
+
+      - name: Install tools
+        run: |
+          make tools
+
+      - name: Check copyright
+        run: |
+          make verify-copyright
+
+      - name: Check syntax and styling of go sources
+        run: |
+          make lint
+
+      - name: Run unit test and get test coverage
+        run: |
+          make cover
