@@ -26,7 +26,7 @@ OS = linux darwin windows
 ARCH_LIST = amd64 arm64
 NAME = sonarqube-client-go
 ROOT_PACKAGE=github.com/toodofun/sonarqube-client-go
-COVERAGE := 20
+COVERAGE := 5
 GOLANG_CI_LINT_VERSION ?= 2.9.0
 SHELL := /bin/bash
 

@@ -38,13 +38,11 @@ func createAPIDefinition(options ...apiDefinitionWith) *apiDefinition {
 		PackageName: fixturePackageName,
 		Version:     fixtureVersion00,
 		Host:        fixtureHost,
-		WebServices: make([]*webService, 0, 0),
+		WebServices: make([]*webService, 0),
 	}
-
 	for _, option := range options {
 		option(a)
 	}
-
 	return a
 }
 
@@ -437,7 +435,6 @@ func Test_filterParams(t *testing.T) {
 }
 
 func Test_getTargetVersion(t *testing.T) {
-
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.String() {
 		case "/api/server/version":
@@ -446,9 +443,7 @@ func Test_getTargetVersion(t *testing.T) {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 		}
 	}))
-
 	defer ts.Close()
-
 	type args struct {
 		client  *http.Client
 		host    string
