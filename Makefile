@@ -119,6 +119,14 @@ build: clean tidy
 		done \
 	done
 
+.PHONY: gen.client
+gen.client:
+	@echo "===========> Generating sonarqube client for golang"
+	@NO_PROXY=$(SONARQUBE_HOST),* no_proxy=$(SONARQUBE_HOST),* \
+		$(GO) run ${ROOT_DIR}/ \
+		-host=${SONARQUBE_HOST} -token=${SONARQUBE_TOKEN} \
+		-internal=false -out=${SONARQUBE_PKG_PATH} -package=sonarqube
+
 ## tools: Install dependent tools.
 .PHONY: tools
 tools:
