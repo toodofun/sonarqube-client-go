@@ -1,0 +1,205 @@
+package {{.PackageName}}
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/google/go-querystring/query"
+
+	"github.com/pkg/errors"
+)
+
+type Client struct {
+	host string
+	username string
+	password string
+	transport *http.Client
+{{- range .WebServices}}
+	{{.Variable}} *{{.ServiceName}}
+{{- end }}
+}
+
+type httpErrorResponse struct {
+	Errors []*httpErrorResponseMsg {{tick}}json:"errors"{{tick}}
+}
+
+func (er *httpErrorResponse) String() string {
+	msgA := make([]string, len(er.Errors))
+	for i, em := range er.Errors {
+		msgA[i] = em.String()
+	}
+	return strings.Join(msgA, ", ")
+}
+
+type httpErrorResponseMsg struct {
+	Msg string {{tick}}json:"msg"{{tick}}
+}
+
+func (em *httpErrorResponseMsg) String() string {
+	return em.Msg
+}
+
+type HttpError struct {
+	status   int
+	parsed   *httpErrorResponse
+	response *http.Response
+}
+
+func (he *HttpError) Error() string {
+	return fmt.Sprintf("http code - %d, msg: %s", he.status, he.parsed.String())
+}
+
+func (he *HttpError) Response() *http.Response {
+	return he.response
+}
+
+func checkHttpErrors(resp *http.Response) error {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusCreated, http.StatusAccepted:
+		return nil
+	default:
+		var err error
+		bytesData, err := io.ReadAll(resp.Body)
+
+		errorResponse := &httpErrorResponse{}
+		if err == nil {
+			err = json.Unmarshal(bytesData, errorResponse)
+		}
+
+		if err != nil {
+			msg := &httpErrorResponseMsg{
+				Msg: "Unknown error: " + err.Error(),
+			}
+			errorResponse = &httpErrorResponse{
+				Errors: []*httpErrorResponseMsg{msg},
+			}
+		}
+
+		result := &HttpError{
+			status:   resp.StatusCode,
+			response: resp,
+			parsed:   errorResponse,
+		}
+		return result
+	}
+}
+
+func NewClient(httpClient *http.Client, host, username, password string) *Client {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	c := &Client{
+		host: host,
+		transport: httpClient,
+		username: username,
+		password: password,
+	}
+
+{{- range .WebServices}}
+	c.{{.Variable}} = new{{.ServiceName}}(c)
+{{- end }}
+
+	return c
+}
+
+func (c *Client) invoke(ctx context.Context, post bool, url string, payload interface{}) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	url = fmt.Sprintf("%s/%s",c.host,url)
+
+	method := http.MethodGet
+	if post {
+		method = http.MethodPost
+	}
+
+	var err error
+	values, err := query.Values(payload)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse payload")
+	}
+
+	var (
+	  req *http.Request
+	  body io.Reader
+	)
+	if method == http.MethodGet {
+		url = fmt.Sprintf("%s?%s",url, values.Encode())
+	} else {
+		body = strings.NewReader(values.Encode())
+	}
+
+	req, err = http.NewRequest(method, url, body)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create request")
+	}
+
+	req.Header.Set("content-type", "application/x-www-form-urlencoded")
+
+	if len(c.username) != 0 && len(c.password) != 0 {
+		req.SetBasicAuth(c.username, c.password)
+	}
+
+	req = req.WithContext(ctx)
+
+	resp, err := c.transport.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkHttpErrors(resp); err != nil {
+		return nil, errors.Wrapf(err, "got error response (url: %s)", url)
+	}
+	return resp, nil
+}
+
+// decodeBody reads and JSON-decodes the response body into v. v must be a non-nil pointer.
+func decodeBody(resp *http.Response, v interface{}) error {
+	if resp == nil || resp.Body == nil {
+		return errors.New("empty response")
+	}
+	if v == nil {
+		return errors.New("decode target must be a non-nil pointer")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "read response body")
+	}
+	if err := json.Unmarshal(body, v); err != nil {
+		return errors.Wrap(err, "decode response body")
+	}
+	return nil
+}
+
+{{- range .WebServices}}
+{{- template "getter" .}}
+{{- end}}
+
+{{- define "getter"}}
+// {{.Getter}} {{.Description}}
+{{- if .Since }}
+// Since : {{.Since}}
+{{- end}}
+{{- if .Deprecated }}
+// Deprecated
+{{- end}}
+{{- if .Internal }}
+// Internal
+{{- end}}
+func (c *Client) {{.Getter}}() *{{.ServiceName}} {
+	return c.{{.Variable}}
+}
+{{- end}}
+
+// String Helper function to convert string to pointer to string
+func String(v string) *string {
+	p := new(string)
+	*p = v
+	return p
+}
